@@ -17,41 +17,6 @@ let settings = {
 const searchWrapper = document.querySelector("#search-wrapper");
 var player = null;
 
-function doubleTapFF(options) {
-	var videoElement = this
-	var videoElementId = this.id();
-	document.getElementById(videoElementId).addEventListener("touchstart", tapHandler);
-	var tapedTwice = false;
-	function tapHandler(e) {
-		if (!videoElement.paused()) {
-
-			if (!tapedTwice) {
-				tapedTwice = true;
-				setTimeout(function () {
-					tapedTwice = false;
-				}, 300);
-				return false;
-			}
-			e.preventDefault();
-			var br = document.getElementById(videoElementId).getBoundingClientRect();
-
-
-			var x = e.touches[0].clientX - br.left;
-			var y = e.touches[0].clientY - br.top;
-
-			if (x <= br.width / 2) {
-				videoElement.currentTime(player.currentTime() - 10)
-			} else {
-				videoElement.currentTime(player.currentTime() + 10)
-
-			}
-		}
-
-
-	}
-}
-videojs.registerPlugin('doubleTapFF', doubleTapFF);
-
 (async function ($) {
   // toggle dark mode button
   const toggleDarkMode = () => {
@@ -102,13 +67,30 @@ videojs.registerPlugin('doubleTapFF', doubleTapFF);
 
     // clean up previous player
     if (player) {
-      player.dispose();
+      player.destroy();
       player = null;
-      const vidElm = document.createElement("video");
-      vidElm.setAttribute("id", "video-player");
-      vidElm.setAttribute("class", "video-js mt-10 w-full");
+    }
 
+    // Reset video player element
+    let vidElm = document.getElementById("video-player");
+    if (!vidElm) {
+      vidElm = document.createElement("video");
+      vidElm.setAttribute("id", "video-player");
+      vidElm.style.width = "980px";
+      vidElm.style.height = "720px";
+      vidElm.style.marginTop = "40px";
+      vidElm.style.marginBottom = "40px";
+      vidElm.setAttribute("class", "mx-auto rounded-lg shadow-xl");
       document.querySelector("main").appendChild(vidElm);
+    } else {
+      // Apply styles to existing element
+      vidElm.style.width = "980px";
+      vidElm.style.height = "720px";
+      vidElm.style.marginTop = "40px";
+      vidElm.style.marginBottom = "40px";
+      vidElm.className = "mx-auto rounded-lg shadow-xl";
+      // Clear any existing sources/tracks
+      vidElm.innerHTML = "";
     }
 
     form
@@ -135,7 +117,7 @@ videojs.registerPlugin('doubleTapFF', doubleTapFF);
       form.querySelector("button[type=submit]").removeAttribute("disabled");
       form.querySelector("button[type=submit]").innerHTML = "Play Now";
       form.querySelector("button[type=submit]").classList.remove("loader");
-      searchResults.querySelectorAll("#play-torrent").forEach((el) => {
+      document.querySelectorAll("#play-torrent").forEach((el) => {
         el.removeAttribute("disabled");
         el.innerHTML = "Watch";
         el.classList.remove("loader");
@@ -170,7 +152,7 @@ videojs.registerPlugin('doubleTapFF', doubleTapFF);
 
     // Find video file
     const videoFiles = files.filter((f) =>
-      f.name.match(/\.(mp4|mkv|webm|avi)$/i)
+      f.name.match(/\.(mp4|mkv|webm|avi|mov|m4v)$/i)
     );
 
     if (!videoFiles.length) {
@@ -196,11 +178,24 @@ videojs.registerPlugin('doubleTapFF', doubleTapFF);
       f.name.match(/\.(srt|vtt|sub)$/i)
     );
 
+    const getMimeType = (filename) => {
+      const ext = filename.split('.').pop().toLowerCase();
+      switch (ext) {
+        case 'mp4': return 'video/mp4';
+        case 'webm': return 'video/webm';
+        case 'mkv': return 'video/x-matroska';
+        case 'avi': return 'video/x-msvideo';
+        case 'mov': return 'video/quicktime';
+        case 'm4v': return 'video/x-m4v';
+        default: return 'video/mp4';
+      }
+    };
+
     const videoUrls = videoFiles.map((file) => {
       return {
         src: "/api/v1/torrent/" + sessionId + "/stream/" + file.index,
         title: file.name,
-        type: "video/mp4",
+        type: getMimeType(file.name),
       };
     });
 
@@ -211,11 +206,14 @@ videojs.registerPlugin('doubleTapFF', doubleTapFF);
         let langName = "English";
 
         // Try to extract language code from filename
-        console.log(subFile.name);
         const langMatch = subFile.name.match(/\.([a-z]{2,3})\.(srt|vtt|sub)$/i);
         if (langMatch) {
           language = langMatch[1];
-          langName = getLanguage(language);
+          try {
+            langName = getLanguage(language) || langName;
+          } catch (e) {
+            console.warn(`Could not get language name for ${language}`);
+          }
         }
 
         return {
@@ -228,82 +226,94 @@ videojs.registerPlugin('doubleTapFF', doubleTapFF);
           srclang: language,
           label: langName,
           kind: "subtitles",
-          type: "vtt",
         };
       });
     }
-    player = videojs(
-      "video-player",
-      {
-        fluid: true,
-        controls: true,
-        autoplay: true,
-        preload: "auto",
-        sources: [{
-          src: videoUrls[0].src,
-          type: videoUrls[0].type,
-          label: videoUrls[0].title,
-        }],
-        tracks: subtitles,
-        html5: {
-          nativeTextTracks: false
-        },
-        plugins: {
-          hotkeys: {
-            volumeStep: 0.1,
-            seekStep: 5,
-            enableModifiersForNumbers: false,
-            enableVolumeScroll: false,
-          },
-        },
-      },
-      function () {
-        player = this;
-        player.on("error", (e) => {
-          console.error(e);
-          butterup.toast({
-            message: "Something went wrong",
-            location: "top-right",
-            icon: true,
-            dismissable: true,
-            type: "error",
-          });
-        });
-      }
-    );
-    player.doubleTapFF();
 
-    document.querySelector("#video-player").style.display = "block";
-    // scroll to video player
-    setTimeout(() => {
-      window.scrollTo({
-        top: document.body.scrollHeight,
-        behavior: "smooth",
+    // Initialize Plyr
+    try {
+      player = new Plyr("#video-player", {
+        controls: [
+          'play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 
+          'captions', 'settings', 'pip', 'airplay', 'fullscreen'
+        ],
+        autoplay: true,
+        ratio: '16:9',
       });
 
+      // Set source
+      player.source = {
+        type: 'video',
+        title: videoUrls[0].title,
+        sources: [{
+          src: videoUrls[0].src,
+          type: videoUrls[0].type
+        }],
+        tracks: subtitles
+      };
+
+      player.on('ready', () => {
+        vidElm.style.display = "block";
+        window.scrollTo({
+          top: vidElm.offsetTop - 20,
+          behavior: "smooth",
+        });
+        player.play().catch(e => console.log("Autoplay prevented:", e));
+      });
+
+      // Handle multiple video files
+      const existingSelect = document.getElementById("video-select-container");
+      if (existingSelect) existingSelect.remove();
+
       if (videoUrls.length > 1) {
+        const selectContainer = document.createElement("div");
+        selectContainer.id = "video-select-container";
+        selectContainer.className = "w-full mt-4 flex flex-col gap-2";
+        
+        const label = document.createElement("label");
+        label.className = "text-sm font-semibold text-muted-foreground";
+        label.innerText = "Select Video File:";
+        selectContainer.appendChild(label);
+
         const videoSelect = document.createElement("select");
-        videoSelect.setAttribute("id", "video-select");
-        videoSelect.setAttribute("class", "video-select");
-        videoSelect.setAttribute("aria-label", "Select video");
-        videoUrls.forEach((video) => {
+        videoSelect.id = "video-select";
+        videoSelect.className = "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+        
+        videoUrls.forEach((video, index) => {
           const option = document.createElement("option");
-          option.setAttribute("value", video.src);
-          option.innerHTML = video.title;
+          option.value = index;
+          option.innerText = video.title;
           videoSelect.appendChild(option);
         });
+
         videoSelect.addEventListener("change", (e) => {
-          const selectedSrc = e.target.value;
-          player.src({
-            src: selectedSrc,
-            type: "video/mp4",
-          });
-          player.play();
+          const selected = videoUrls[e.target.value];
+          player.source = {
+            type: 'video',
+            title: selected.title,
+            sources: [{
+              src: selected.src,
+              type: selected.type
+            }],
+            tracks: subtitles
+          };
+          player.play().catch(e => console.log("Play error:", e));
         });
-        document.querySelector("#video-player").appendChild(videoSelect);
+
+        selectContainer.appendChild(videoSelect);
+        vidElm.parentNode.insertBefore(selectContainer, vidElm.nextSibling);
       }
-      player.play()
-    }, 300);
+
+    } catch (error) {
+      console.error('Failed to initialize Plyr player:', error);
+      butterup.toast({
+        message: "Failed to initialize video player",
+        location: "top-right",
+        icon: true,
+        dismissable: true,
+        type: "error",
+      });
+    }
 
     form.querySelector("button[type=submit]").removeAttribute("disabled");
     form.querySelector("button[type=submit]").innerHTML = "Play Now";

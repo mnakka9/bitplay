@@ -630,6 +630,11 @@ func torrentHandler(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("Streaming file: %s (type: %s)", fileName, extension)
 
+		// Always set CORS headers for streaming
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Range, Content-Type")
+		w.Header().Set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges")
+
 		switch extension {
 		case ".mp4":
 			w.Header().Set("Content-Type", "video/mp4")
@@ -639,11 +644,14 @@ func torrentHandler(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "video/x-matroska")
 		case ".avi":
 			w.Header().Set("Content-Type", "video/x-msvideo")
+		case ".mov":
+			w.Header().Set("Content-Type", "video/quicktime")
+		case ".m4v":
+			w.Header().Set("Content-Type", "video/x-m4v")
 		case ".srt":
 			// For SRT, convert to VTT on-the-fly if requested as VTT
 			if r.URL.Query().Get("format") == "vtt" {
 				w.Header().Set("Content-Type", "text/vtt")
-				w.Header().Set("Access-Control-Allow-Origin", "*") // Allow cross-origin requests
 
 				// Read the SRT file with size limit
 				reader := file.NewReader()
@@ -661,19 +669,18 @@ func torrentHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			} else {
 				w.Header().Set("Content-Type", "text/plain")
-				w.Header().Set("Access-Control-Allow-Origin", "*") // Allow cross-origin requests
 			}
 		case ".vtt":
 			w.Header().Set("Content-Type", "text/vtt")
-			w.Header().Set("Access-Control-Allow-Origin", "*") // Allow cross-origin requests
 		case ".sub":
 			w.Header().Set("Content-Type", "text/plain")
-			w.Header().Set("Access-Control-Allow-Origin", "*") // Allow cross-origin requests
 		default:
 			w.Header().Set("Content-Type", "application/octet-stream")
 		}
 
-		// Add CORS headers for all content
+		// Prioritize this file for downloading
+		file.Download()
+
 		// Stream the file
 		reader := file.NewReader()
 		// ServeContent will close the reader when done but we need to
@@ -681,10 +688,8 @@ func torrentHandler(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if closer, ok := reader.(io.Closer); ok {
 				closer.Close()
-				println("Closed reader***************************************")
 			}
 		}()
-		println("Serving content*****************************************")
 		http.ServeContent(w, r, fileName, time.Time{}, reader)
 		return
 	}
