@@ -1,3 +1,6 @@
+# Note
+I have changed the player from VideoJS to PLYR.IO for better controls and subtitles support. 
+
 # BitPlay: Torrent Streaming Web App
 
 BitPlay is a web application built with Go that allows you to stream video content directly from torrents in your browser. It features a clean web UI, support for SOCKS5 proxies, and integration with Prowlarr and Jackett for seamless torrent searching.
@@ -48,7 +51,7 @@ This is the recommended method for deployment.
     ```yaml
     services:
       bitplay:
-        image: ghcr.io/aculix/bitplay:main
+        image: docker.io/maheshnakka/bitplay:latest
         container_name: bitplay
         ports:
           - 3347:3347 # Expose the web UI port
@@ -85,14 +88,14 @@ Alternatively, you can run the container directly using `docker run`:
       # Add the volume mount below ONLY if you want persistent settings (and created ./config above)
       -v $(pwd)/config:/app/config \
       --restart unless-stopped \
-      ghcr.io/aculix/bitplay:main
+      docker.io/maheshnakka/bitplay:latest
     ```
     *   `-d`: Run in detached mode (background).
     *   `--name bitplay`: Assign a name to the container.
     *   `-p 3347:3347`: Map port 3347 on the host to port 3347 in the container.
     *   `-v $(pwd)/config:/app/config`: (Optional) Mount the local `./config` directory for persistent settings.
     *   `--restart unless-stopped`: Configure the container to restart automatically unless manually stopped.
-    *   `ghcr.io/aculix/bitplay:main`: The Docker image to use.
+    *   `docker.io/maheshnakka/bitplay:latest`: The Docker image to use.
 
 3.  **Access the application:** Open your browser to `http://<your-server-ip>:3347`.
 
